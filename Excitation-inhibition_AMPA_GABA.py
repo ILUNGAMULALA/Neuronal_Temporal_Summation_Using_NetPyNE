@@ -15,23 +15,23 @@ Live animation visualizes:
 - Voltage of Neuron B (hyperpolarization)
 """
 
-# =============================================================================
+
 # Imports
-# =============================================================================
+
 from netpyne import specs, sim
 import matplotlib
 matplotlib.use('TkAgg')  # Reliable interactive backend (Windows/Linux)
 import matplotlib.pyplot as plt
 from matplotlib.animation import FuncAnimation
 
-# =============================================================================
+
 # Network parameters
-# =============================================================================
+
 netParams = specs.NetParams()
 
-# ----------------------------------------------------------------------------
+
 # Cell models
-# ----------------------------------------------------------------------------
+
 # Spiking neuron (Neuron A)
 netParams.cellParams['spiking_cell'] = {
     'secs': {
@@ -59,16 +59,16 @@ netParams.cellParams['passive_cell'] = {
     }
 }
 
-# ----------------------------------------------------------------------------
+
 # Populations
-# ----------------------------------------------------------------------------
+
 netParams.popParams['PopA'] = {'cellType': 'spiking_cell', 'numCells': 1}
 netParams.popParams['PopB'] = {'cellType': 'passive_cell', 'numCells': 1}
 
-# ----------------------------------------------------------------------------
+
 # Synaptic mechanisms
-# ----------------------------------------------------------------------------
-# Excitatory AMPA
+
+
 netParams.synMechParams['AMPA'] = {
     'mod': 'Exp2Syn',
     'tau1': 0.5,
@@ -84,9 +84,9 @@ netParams.synMechParams['GABA'] = {
     'e': -80
 }
 
-# ----------------------------------------------------------------------------
+
 # Temporal summation input to Neuron A
-# ----------------------------------------------------------------------------
+
 netParams.stimSourceParams['excStimA'] = {
     'type': 'NetStim',
     'start': 20,
@@ -105,9 +105,9 @@ netParams.stimTargetParams['excStimA->A'] = {
     'loc': 0.5
 }
 
-# ----------------------------------------------------------------------------
+
 # Inhibitory connection: Neuron A -> Neuron B
-# ----------------------------------------------------------------------------
+
 netParams.connParams['A->B_inhibition'] = {
     'preConds': {'pop': 'PopA'},
     'postConds': {'pop': 'PopB'},
@@ -118,9 +118,9 @@ netParams.connParams['A->B_inhibition'] = {
     'loc': 0.5
 }
 
-# =============================================================================
+
 # Simulation configuration
-# =============================================================================
+
 simConfig = specs.SimConfig()
 
 simConfig.duration = 120
@@ -133,23 +133,23 @@ simConfig.recordTraces = {
     'V_soma': {'sec': 'soma', 'loc': 0.5, 'var': 'v'}
 }
 
-# =============================================================================
+
 # Run simulation
-# =============================================================================
+
 print("Running simulation...")
 sim.createSimulateAnalyze(netParams=netParams, simConfig=simConfig)
 print("Simulation finished.")
 
-# =============================================================================
+
 # Extract recorded data
-# =============================================================================
+
 time = sim.allSimData['t']
 V_A = sim.allSimData['V_soma']['cell_0']
 V_B = sim.allSimData['V_soma']['cell_1']
 
-# =============================================================================
+
 # Live animation
-# =============================================================================
+
 fig, ax = plt.subplots(figsize=(12, 6))
 ax.set_xlim(0, simConfig.duration)
 ax.set_ylim(-90, 40)
@@ -183,14 +183,3 @@ ani = FuncAnimation(fig, update, frames=frames, init_func=init,
 print("Starting live animation...")
 plt.show()
 
-# =============================================================================
-# Summary
-# =============================================================================
-print("\nRESULT SUMMARY")
-print("------------------------------")
-print(f"Neuron A peak voltage: {max(V_A):.2f} mV")
-print(f"Neuron B minimum voltage: {min(V_B):.2f} mV")
-print("\nInterpretation:")
-print("- Neuron A integrates temporally close EPSPs and fires an action potential.")
-print("- That spike triggers inhibitory synaptic input onto Neuron B.")
-print("- Neuron B hyperpolarizes, demonstrating spatial summation of inhibition.")
