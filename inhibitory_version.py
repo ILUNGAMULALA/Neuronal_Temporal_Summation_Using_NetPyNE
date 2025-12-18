@@ -1,86 +1,129 @@
 """
-Temporal Summation Experiment using NetPyNE (Inhibitory Version)
+Temporal + Spatial Summation Demo using NetPyNE
 
-This script now demonstrates temporal summation of inhibitory postsynaptic potentials (IPSPs):
-1. Wide spike interval (20.0, 60.0 ms) - minimal summation
-2. Narrow spike interval (20.0, 25.0 ms) - clear temporal summation of inhibition
+Neuron A:
+- Receives temporally close excitatory inputs (AMPA)
+- Temporal summation drives it above threshold
+- Fires an action potential
 
-Key changes for inhibition:
-- Synapse renamed to 'GABA' (for clarity)
-- Reversal potential 'e' set to -80 mV (below resting potential → hyperpolarizing IPSPs)
-- Decay time constant tau2 increased to 10 ms (typical for GABA_A synapses)
-- Weight remains positive 0.001 (magnitude of conductance; sign determined by reversal potential)
-- Y-axis limits adjusted to show hyperpolarization
-- Title and legend updated to reflect inhibition
+Neuron B:
+- Receives inhibitory synapse (GABA_A-like) from Neuron A
+- Shows spatial integration of inhibition
+
+Live animation visualizes:
+- Voltage of Neuron A (spiking)
+- Voltage of Neuron B (hyperpolarization)
 """
 
-# Import necessary modules
+# =============================================================================
+# Imports
+# =============================================================================
 from netpyne import specs, sim
+import matplotlib
+matplotlib.use('TkAgg')  # Reliable interactive backend (Windows/Linux)
 import matplotlib.pyplot as plt
 from matplotlib.animation import FuncAnimation
-import matplotlib
 
-matplotlib.use('TkAgg')  # Ensures interactive window stays open
-
-# Network Parameters (netParams)
+# =============================================================================
+# Network parameters
+# =============================================================================
 netParams = specs.NetParams()
 
-# Cell Properties (passive single-compartment)
-netParams.cellParams['passive_cell'] = {
+# ----------------------------------------------------------------------------
+# Cell models
+# ----------------------------------------------------------------------------
+# Spiking neuron (Neuron A)
+netParams.cellParams['spiking_cell'] = {
     'secs': {
         'soma': {
-            'geom': {'diam': 18.8, 'L': 18.8, 'Ra': 123.0, 'cm': 1.0},
-            'mechs': {'pas': {'g': 0.0000357, 'e': -70}},
+            'geom': {'L': 20, 'diam': 20, 'cm': 1},
+            'mechs': {
+                'hh': {},
+                'pas': {'g': 0.00003, 'e': -70}
+            },
             'vinit': -70
         }
     }
 }
 
-# Population
-netParams.popParams['postPop'] = {
-    'cellType': 'passive_cell',
-    'numCells': 2
+# Passive neuron (Neuron B)
+netParams.cellParams['passive_cell'] = {
+    'secs': {
+        'soma': {
+            'geom': {'L': 20, 'diam': 20, 'cm': 1},
+            'mechs': {
+                'pas': {'g': 0.00003, 'e': -70}
+            },
+            'vinit': -70
+        }
+    }
 }
 
-# Synapse Mechanisms (Now Inhibitory GABA_A-like)
+# ----------------------------------------------------------------------------
+# Populations
+# ----------------------------------------------------------------------------
+netParams.popParams['PopA'] = {'cellType': 'spiking_cell', 'numCells': 1}
+netParams.popParams['PopB'] = {'cellType': 'passive_cell', 'numCells': 1}
+
+# ----------------------------------------------------------------------------
+# Synaptic mechanisms
+# ----------------------------------------------------------------------------
+# Excitatory AMPA
+netParams.synMechParams['AMPA'] = {
+    'mod': 'Exp2Syn',
+    'tau1': 0.5,
+    'tau2': 5.0,
+    'e': 0
+}
+
+# Inhibitory GABA
 netParams.synMechParams['GABA'] = {
     'mod': 'Exp2Syn',
-    'tau1': 0.5,    # Rise time (ms)
-    'tau2': 10.0,   # Decay time (ms) - it is longer for GABA
-    'e': -80        # Reversal potential (mV) - KEY PARAMETER FOR INHIBITION
+    'tau1': 0.5,
+    'tau2': 10.0,
+    'e': -80
 }
 
-# Stimulation Sources
-netParams.stimSourceParams['stimWide'] = {
-    'type': 'NetStim', 'start': 20.0, 'interval': 40.0, 'noise': 0, 'number': 2
+# ----------------------------------------------------------------------------
+# Temporal summation input to Neuron A
+# ----------------------------------------------------------------------------
+netParams.stimSourceParams['excStimA'] = {
+    'type': 'NetStim',
+    'start': 20,
+    'interval': 4,   # close spikes for temporal summation
+    'number': 3,
+    'noise': 0
 }
-netParams.stimTargetParams['stimWide->post0'] = {
-    'source': 'stimWide',
-    'conds': {'pop': 'postPop', 'cellList': [0]},
-    'synMech': 'GABA',      # Use inhibitory synapse
-    'weight': 0.001,        # Positive weight (magnitude); no change needed
-    'delay': 1.0,
+
+netParams.stimTargetParams['excStimA->A'] = {
+    'source': 'excStimA',
+    'conds': {'pop': 'PopA'},
+    'synMech': 'AMPA',
+    'weight': 0.002,
+    'delay': 1,
     'sec': 'soma',
     'loc': 0.5
 }
 
-netParams.stimSourceParams['stimNarrow'] = {
-    'type': 'NetStim', 'start': 20.0, 'interval': 5.0, 'noise': 0, 'number': 2
-}
-netParams.stimTargetParams['stimNarrow->post1'] = {
-    'source': 'stimNarrow',
-    'conds': {'pop': 'postPop', 'cellList': [1]},
-    'synMech': 'GABA',      # Use inhibitory synapse
-    'weight': 0.001,        # Positive weight
-    'delay': 1.0,
+# ----------------------------------------------------------------------------
+# Inhibitory connection: Neuron A -> Neuron B
+# ----------------------------------------------------------------------------
+netParams.connParams['A->B_inhibition'] = {
+    'preConds': {'pop': 'PopA'},
+    'postConds': {'pop': 'PopB'},
+    'synMech': 'GABA',
+    'weight': 0.003,
+    'delay': 2,
     'sec': 'soma',
     'loc': 0.5
 }
 
-# Simulation Configuration
+# =============================================================================
+# Simulation configuration
+# =============================================================================
 simConfig = specs.SimConfig()
 
-simConfig.duration = 200.0
+simConfig.duration = 120
 simConfig.dt = 0.025
 simConfig.recordStep = 0.025
 simConfig.verbose = False
@@ -90,74 +133,64 @@ simConfig.recordTraces = {
     'V_soma': {'sec': 'soma', 'loc': 0.5, 'var': 'v'}
 }
 
-# Run Simulation
-print("Creating network and running simulation (inhibitory synapses)...")
+# =============================================================================
+# Run simulation
+# =============================================================================
+print("Running simulation...")
 sim.createSimulateAnalyze(netParams=netParams, simConfig=simConfig)
-print("Simulation complete!")
+print("Simulation finished.")
 
-# Extract Data
+# =============================================================================
+# Extract recorded data
+# =============================================================================
 time = sim.allSimData['t']
+V_A = sim.allSimData['V_soma']['cell_0']
+V_B = sim.allSimData['V_soma']['cell_1']
 
-if 'V_soma' in sim.allSimData and isinstance(sim.allSimData['V_soma'], dict):
-    V_wide = sim.allSimData['V_soma'].get('cell_0', [])
-    V_narrow = sim.allSimData['V_soma'].get('cell_1', [])
-else:
-    print("Error: Voltage data not available.")
-    V_wide = []
-    V_narrow = []
+# =============================================================================
+# Live animation
+# =============================================================================
+fig, ax = plt.subplots(figsize=(12, 6))
+ax.set_xlim(0, simConfig.duration)
+ax.set_ylim(-90, 40)
+ax.set_xlabel('Time (ms)')
+ax.set_ylabel('Membrane potential (mV)')
+ax.set_title('Temporal Summation → Spike → Inhibitory Spatial Effect')
+ax.grid(alpha=0.3)
 
-# Live Animation Setup (Updated for Inhibition)
-fig, ax = plt.subplots(figsize=(12, 7))
-ax.set_xlabel('Time (ms)', fontsize=12, fontweight='bold')
-ax.set_ylabel('Membrane Potential (mV)', fontsize=12, fontweight='bold')
-ax.set_title('Live Demo: Temporal Summation of Inhibitory Synapses (IPSPs)', fontsize=16, fontweight='bold')
-ax.grid(True, alpha=0.3)
-ax.set_xlim(0, 200)
-ax.set_ylim(-110, -60)  # Adjusted to show hyperpolarization
+line_A, = ax.plot([], [], 'r', lw=2, label='Neuron A (spiking)')
+line_B, = ax.plot([], [], 'b', lw=2, label='Neuron B (inhibited)')
+ax.legend(loc='upper right')
 
-line_wide, = ax.plot([], [], 'b-', linewidth=3, label='Wide Interval (minimal summation)')
-line_narrow, = ax.plot([], [], 'r-', linewidth=3, label='Narrow Interval (strong summation)')
-ax.legend(loc='lower right', fontsize=12)  # Legend position adjusted for downward traces
-
-stim_lines = []
-summation_patch = ax.axvspan(20, 35, alpha=0.15, color='yellow')
-summation_patch.set_visible(False)
 
 def init():
-    line_wide.set_data([], [])
-    line_narrow.set_data([], [])
-    for sl in stim_lines:
-        sl.remove()
-    stim_lines.clear()
-    summation_patch.set_visible(False)
-    return [line_wide, line_narrow, summation_patch]
+    line_A.set_data([], [])
+    line_B.set_data([], [])
+    return line_A, line_B
+
 
 def update(frame):
-    step = 16  # Animation speed
+    step = 10
     idx = min(frame * step, len(time))
-    
-    line_wide.set_data(time[:idx], V_wide[:idx])
-    line_narrow.set_data(time[:idx], V_narrow[:idx])
-    
-    dt = simConfig.dt
-    if idx >= int(21 / dt) and len(stim_lines) < 1:
-        stim_lines.append(ax.axvline(21, color='gray', linestyle='--', alpha=0.7, linewidth=2))
-    if idx >= int(26 / dt) and len(stim_lines) < 2:
-        stim_lines.append(ax.axvline(26, color='gray', linestyle='--', alpha=0.7, linewidth=2))
-    if idx >= int(61 / dt) and len(stim_lines) < 3:
-        stim_lines.append(ax.axvline(61, color='gray', linestyle='--', alpha=0.7, linewidth=2))
-    
-    if idx > 0 and 20 <= time[idx-1] <= 35:
-        summation_patch.set_visible(True)
-    else:
-        summation_patch.set_visible(False)
-    
-    return [line_wide, line_narrow, summation_patch] + stim_lines
+    line_A.set_data(time[:idx], V_A[:idx])
+    line_B.set_data(time[:idx], V_B[:idx])
+    return line_A, line_B
 
-num_frames = (len(time) // 8) + 20
-ani = FuncAnimation(fig, update, frames=num_frames, init_func=init,
-                    blit=False, interval=80, repeat=True)
+frames = len(time) // 10
+ani = FuncAnimation(fig, update, frames=frames, init_func=init,
+                    interval=60, blit=False, repeat=True)
 
-print("\nStarting live animation... The window will stay open and loop until you close it.")
+print("Starting live animation...")
 plt.show()
 
+# =============================================================================
+# Summary
+# =============================================================================
+print("\nRESULT SUMMARY")
+print("------------------------------")
+print(f"Neuron A peak voltage: {max(V_A):.2f} mV")
+print(f"Neuron B minimum voltage: {min(V_B):.2f} mV")
+print("\nInterpretation:")
+print("- Neuron A integrates temporally close EPSPs and fires an action potential.")
+print("- That spike triggers inhibitory synaptic input onto Neuron B.")
+print("- Neuron B hyperpolarizes, demonstrating spatial summation of inhibition.")
